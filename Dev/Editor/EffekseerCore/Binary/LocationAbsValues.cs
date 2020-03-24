@@ -27,12 +27,38 @@ namespace Effekseer.Binary
 			{
 				data.Add(lff.Type.GetValueAsInt().GetBytes());
 
-				if(lff.Type.Value == Data.LocalForceFieldType.Turbulence)
+				if (lff.Type.Value == Data.LocalForceFieldType.Force)
+				{
+					data.Add(lff.Force.Power.GetBytes());
+					data.Add((lff.Force.Gravitation.GetValue()  ? 1 : 0).GetBytes());
+				}
+
+				if (lff.Type.Value == Data.LocalForceFieldType.Wind)
+				{
+					data.Add(lff.Wind.Power.GetBytes());
+				}
+
+				if (lff.Type.Value == Data.LocalForceFieldType.Vortex)
+				{
+					data.Add(lff.Vortex.Power.GetBytes());
+				}
+
+				if (lff.Type.Value == Data.LocalForceFieldType.Maginetic)
+				{
+					data.Add(lff.Maginetic.Power.GetBytes());
+				}
+
+				if (lff.Type.Value == Data.LocalForceFieldType.Turbulence)
 				{
 					data.Add(lff.Turbulence.Seed.Value.GetBytes());
 					data.Add(lff.Turbulence.FieldScale.Value.GetBytes());
 					data.Add(lff.Turbulence.Strength.Value.GetBytes());
 					data.Add(lff.Turbulence.Octave.Value.GetBytes());
+				}
+
+				if (lff.Type.Value == Data.LocalForceFieldType.Drag)
+				{
+					data.Add(lff.Drag.Power.GetBytes());
 				}
 			}
 
