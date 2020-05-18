@@ -9,7 +9,7 @@ namespace Effekseer.Binary
 {
 	class LocationAbsValues
 	{
-		public static byte[] GetBytes(Data.LocationAbsValues value, Data.ParentEffectType parentEffectType)
+		public static byte[] GetBytes(Data.LocationAbsValues value, Data.ParentEffectType parentEffectType, ExporterVersion version)
 		{
 			List<byte[]> data = new List<byte[]>();
 
@@ -25,40 +25,63 @@ namespace Effekseer.Binary
 
 			foreach(var lff in lffs)
 			{
-				data.Add(lff.Type.GetValueAsInt().GetBytes());
-
-				if (lff.Type.Value == Data.LocalForceFieldType.Force)
+				if(version >= ExporterVersion.Ver1600)
 				{
-					data.Add(lff.Force.Power.GetBytes());
-					data.Add((lff.Force.Gravitation.GetValue()  ? 1 : 0).GetBytes());
+					data.Add(lff.Type.GetValueAsInt().GetBytes());
+
+					if (lff.Type.Value == Data.LocalForceFieldType.Force)
+					{
+						data.Add(lff.Force.Power.GetBytes());
+						data.Add((lff.Force.Gravitation.GetValue() ? 1 : 0).GetBytes());
+					}
+
+					if (lff.Type.Value == Data.LocalForceFieldType.Wind)
+					{
+						data.Add(lff.Wind.Power.GetBytes());
+					}
+
+					if (lff.Type.Value == Data.LocalForceFieldType.Vortex)
+					{
+						data.Add(lff.Vortex.Power.GetBytes());
+					}
+
+					if (lff.Type.Value == Data.LocalForceFieldType.Maginetic)
+					{
+						data.Add(lff.Maginetic.Power.GetBytes());
+					}
+
+					if (lff.Type.Value == Data.LocalForceFieldType.Turbulence)
+					{
+						data.Add(lff.Turbulence.Seed.Value.GetBytes());
+						data.Add(lff.Turbulence.FieldScale.Value.GetBytes());
+						data.Add(lff.Turbulence.Strength.Value.GetBytes());
+						data.Add(lff.Turbulence.Octave.Value.GetBytes());
+					}
+
+					if (lff.Type.Value == Data.LocalForceFieldType.Drag)
+					{
+						data.Add(lff.Drag.Power.GetBytes());
+					}
 				}
-
-				if (lff.Type.Value == Data.LocalForceFieldType.Wind)
+				else
 				{
-					data.Add(lff.Wind.Power.GetBytes());
-				}
+					// 1.5 or later
+					if(lff.Type.Value == Data.LocalForceFieldType.Turbulence)
+					{
+						data.Add(lff.Type.GetValueAsInt().GetBytes());
+					}
+					else
+					{
+						data.Add(((int)(Data.LocalForceFieldType.None)).GetBytes());
+					}
 
-				if (lff.Type.Value == Data.LocalForceFieldType.Vortex)
-				{
-					data.Add(lff.Vortex.Power.GetBytes());
-				}
-
-				if (lff.Type.Value == Data.LocalForceFieldType.Maginetic)
-				{
-					data.Add(lff.Maginetic.Power.GetBytes());
-				}
-
-				if (lff.Type.Value == Data.LocalForceFieldType.Turbulence)
-				{
-					data.Add(lff.Turbulence.Seed.Value.GetBytes());
-					data.Add(lff.Turbulence.FieldScale.Value.GetBytes());
-					data.Add(lff.Turbulence.Strength.Value.GetBytes());
-					data.Add(lff.Turbulence.Octave.Value.GetBytes());
-				}
-
-				if (lff.Type.Value == Data.LocalForceFieldType.Drag)
-				{
-					data.Add(lff.Drag.Power.GetBytes());
+					if (lff.Type.Value == Data.LocalForceFieldType.Turbulence)
+					{
+						data.Add(lff.Turbulence.Seed.Value.GetBytes());
+						data.Add(lff.Turbulence.FieldScale.Value.GetBytes());
+						data.Add(lff.Turbulence.Strength.Value.GetBytes());
+						data.Add(lff.Turbulence.Octave.Value.GetBytes());
+					}
 				}
 			}
 
