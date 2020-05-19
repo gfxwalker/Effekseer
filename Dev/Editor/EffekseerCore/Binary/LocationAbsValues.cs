@@ -29,25 +29,29 @@ namespace Effekseer.Binary
 				{
 					data.Add(lff.Type.GetValueAsInt().GetBytes());
 
+					data.Add(BitConverter.GetBytes(lff.Position.X));
+					data.Add(BitConverter.GetBytes(lff.Position.Y));
+					data.Add(BitConverter.GetBytes(lff.Position.Z));
+
 					if (lff.Type.Value == Data.LocalForceFieldType.Force)
 					{
-						data.Add(lff.Force.Power.GetBytes());
+						data.Add(lff.Power.GetBytes());
 						data.Add((lff.Force.Gravitation.GetValue() ? 1 : 0).GetBytes());
 					}
 
 					if (lff.Type.Value == Data.LocalForceFieldType.Wind)
 					{
-						data.Add(lff.Wind.Power.GetBytes());
+						data.Add(lff.Power.GetBytes());
 					}
 
 					if (lff.Type.Value == Data.LocalForceFieldType.Vortex)
 					{
-						data.Add(lff.Vortex.Power.GetBytes());
+						data.Add(lff.Power.GetBytes());
 					}
 
 					if (lff.Type.Value == Data.LocalForceFieldType.Maginetic)
 					{
-						data.Add(lff.Maginetic.Power.GetBytes());
+						data.Add(lff.Power.GetBytes());
 					}
 
 					if (lff.Type.Value == Data.LocalForceFieldType.Turbulence)
@@ -60,7 +64,7 @@ namespace Effekseer.Binary
 
 					if (lff.Type.Value == Data.LocalForceFieldType.Drag)
 					{
-						data.Add(lff.Drag.Power.GetBytes());
+						data.Add(lff.Power.GetBytes());
 					}
 				}
 				else

@@ -327,6 +327,7 @@ struct LocalForceFieldParameterOld
 
 struct LocalForceFieldElementParameter
 {
+	Vector3D Position;
 	std::unique_ptr<ForceFieldForceParameter> Force;
 	std::unique_ptr<ForceFieldWindParameter> Wind;
 	std::unique_ptr<ForceFieldVortexParameter> Vortex;

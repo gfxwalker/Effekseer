@@ -56,6 +56,10 @@ bool LocalForceFieldElementParameter::Load(uint8_t*& pos, int32_t version)
 	LocalForceFieldType type{};
 	br.Read(type);
 
+	br.Read(Position.X);
+	br.Read(Position.Y);
+	br.Read(Position.Z);
+
 	if (type == LocalForceFieldType::Force)
 	{
 		float power = 0.0f;
@@ -181,7 +185,7 @@ void LocalForceFieldInstance::Update(const LocalForceFieldParameter& parameter, 
 		}
 
 		ForceFieldCommonParameter ffcp;
-		ffcp.FieldCenter = Vec3f(0, 0, 0);
+		ffcp.FieldCenter = parameter.LocalForceFields[i].Position;
 		ffcp.Position = location / magnification;
 		ffcp.PreviousSumVelocity = VelocitySum;
 		ffcp.PreviousVelocity = Velocities[i];

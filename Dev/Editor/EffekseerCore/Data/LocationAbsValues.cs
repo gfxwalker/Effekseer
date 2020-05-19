@@ -25,63 +25,45 @@ namespace Effekseer.Data
 
 	public class ForceFieldWind
 	{
-		public Value.Float Power { get; private set; }
-
 		public ForceFieldWind()
 		{
-			Power = new Value.Float(1.0f);
 		}
 	}
 
 	public class ForceFieldVortex
 	{
-		public Value.Float Power { get; private set; }
-
 		public ForceFieldVortex()
 		{
-			Power = new Value.Float(1.0f);
 		}
 	}
 
 	public class ForceFieldMaginetic
 	{
-		public Value.Float Power { get; private set; }
-
 		public ForceFieldMaginetic()
 		{
-			Power = new Value.Float(1.0f);
 		}
 	}
 
 	public class ForceFieldCharge
 	{
-		public Value.Float Power { get; private set; }
-
 		public ForceFieldCharge()
 		{
-			Power = new Value.Float(1.0f);
 		}
 	}
 
 	public class ForceFieldDrag
 	{
-		public Value.Float Power { get; private set; }
-
 		public ForceFieldDrag()
 		{
-			Power = new Value.Float(1.0f);
 		}
 	}
 
 	public class ForceFieldForce
 	{
-		public Value.Float Power { get; private set; }
-
 		public Value.Boolean Gravitation { get; private set; }
 
 		public ForceFieldForce()
 		{
-			Power = new Value.Float(1.0f);
 			Gravitation = new Value.Boolean(false);
 		}
 	}
@@ -128,6 +110,22 @@ namespace Effekseer.Data
 			get;
 			private set;
 		}
+
+		[Selected(ID = 10, Value = (int)LocalForceFieldType.Force)]
+		[Selected(ID = 10, Value = (int)LocalForceFieldType.Wind)]
+		[Selected(ID = 10, Value = (int)LocalForceFieldType.Vortex)]
+		[Selected(ID = 10, Value = (int)LocalForceFieldType.Maginetic)]
+		// [Selected(ID = 10, Value = (int)LocalForceFieldType.Turbulence)]
+		[Selected(ID = 10, Value = (int)LocalForceFieldType.Drag)]
+		public Value.Float Power { get; private set; }
+
+		[Selected(ID = 10, Value = (int)LocalForceFieldType.Force)]
+		[Selected(ID = 10, Value = (int)LocalForceFieldType.Wind)]
+		[Selected(ID = 10, Value = (int)LocalForceFieldType.Vortex)]
+		[Selected(ID = 10, Value = (int)LocalForceFieldType.Maginetic)]
+		[Selected(ID = 10, Value = (int)LocalForceFieldType.Drag)]
+
+		public Value.Vector3D Position { get; private set; }
 
 		[IO(Export = true)]
 		[Selected(ID = 10, Value = (int)LocalForceFieldType.Force)]
@@ -183,6 +181,9 @@ namespace Effekseer.Data
 		{
 			this.number = number;
 			Type = new Value.Enum<LocalForceFieldType>();
+			Power = new Value.Float(1.0f);
+			Position = new Value.Vector3D();
+
 			Force = new ForceFieldForce();
 			Wind = new ForceFieldWind();
 			Vortex = new ForceFieldWind();
@@ -216,6 +217,9 @@ namespace Effekseer.Data
 			ev.IsUndoEnabled = true;
 			ev.SelfSelectorID = 10;
 			ret.Add(ev);
+
+			ret.Add(EditableValue.Create(Position, this.GetType().GetProperty("Position")));
+			ret.Add(EditableValue.Create(Power, this.GetType().GetProperty("Power")));
 
 			ret.Add(EditableValue.Create(Force, this.GetType().GetProperty("Force")));
 			ret.Add(EditableValue.Create(Wind, this.GetType().GetProperty("Wind")));
