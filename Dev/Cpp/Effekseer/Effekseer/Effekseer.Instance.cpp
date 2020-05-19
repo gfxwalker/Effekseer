@@ -237,32 +237,34 @@ Instance::~Instance()
 	}
 }
 
-bool Instance::IsRequiredToCreateChildren(float currentTime)
+//bool Instance::IsRequiredToCreateChildren(float currentTime)
+//{
+//	auto instanceGlobal = this->m_pContainer->GetRootInstance();
+//
+//	auto parameter = (EffectNodeImplemented*)m_pEffectNode;
+//
+//	InstanceGroup* group = childrenGroups_;
+//
+//	for (int32_t i = 0; i < parameter->GetChildrenCount(); i++, group = group->NextUsedByInstance)
+//	{
+//		auto node = (EffectNodeImplemented*)parameter->GetChild(i);
+//		assert(group != NULL);
+//
+//		// GenerationTimeOffset can be minus value.
+//		// Minus frame particles is generated simultaniously at frame 0.
+//		if (maxGenerationChildrenCount[i] > m_generatedChildrenCount[i] && m_nextGenerationTime[i] <= currentTime)
+//		{
+//			return true;
+//		}
+//	}
+//
+//	return false;
+//}
+
+void Instance::GenerateChildrenInRequired()
 {
-	auto instanceGlobal = this->m_pContainer->GetRootInstance();
+	const float currentTime = m_LivingTime;
 
-	auto parameter = (EffectNodeImplemented*)m_pEffectNode;
-
-	InstanceGroup* group = childrenGroups_;
-
-	for (int32_t i = 0; i < parameter->GetChildrenCount(); i++, group = group->NextUsedByInstance)
-	{
-		auto node = (EffectNodeImplemented*)parameter->GetChild(i);
-		assert(group != NULL);
-
-		// GenerationTimeOffset can be minus value.
-		// Minus frame particles is generated simultaniously at frame 0.
-		if (maxGenerationChildrenCount[i] > m_generatedChildrenCount[i] && m_nextGenerationTime[i] <= currentTime)
-		{
-			return true;
-		}
-	}
-
-	return false;
-}
-
-void Instance::GenerateChildrenInRequired(float currentTime)
-{
 	auto instanceGlobal = this->m_pContainer->GetRootInstance();
 
 	auto parameter = (EffectNodeImplemented*)m_pEffectNode;
@@ -287,7 +289,7 @@ void Instance::GenerateChildrenInRequired(float currentTime)
 				{
 					Mat43f rootMatrix = Mat43f::Identity;
 
-					newInstance->Initialize(this, m_generatedChildrenCount[i], (int32_t)std::max(0.0f, this->m_LivingTime), rootMatrix);
+					newInstance->Initialize(this, m_generatedChildrenCount[i], rootMatrix);
 				}
 
 				m_generatedChildrenCount[i]++;
@@ -300,6 +302,25 @@ void Instance::GenerateChildrenInRequired(float currentTime)
 				break;
 			}
 		}
+
+
+		/*int32_t instanceNumberOffset = m_generatedChildrenCount[i];
+
+		// GenerationTimeOffset can be minus value.
+		// Minus frame particles is generated simultaniously at frame 0.
+		while (maxGenerationChildrenCount[i] > m_generatedChildrenCount[i] &&
+			m_nextGenerationTime[i] <= currentTime)
+		{
+			m_generatedChildrenCount[i]++;
+
+			auto gt = ApplyEq(node->CommonValues.RefEqGenerationTime, node->CommonValues.GenerationTime);
+			m_nextGenerationTime[i] += Max(0.0f, gt.getValue(*instanceGlobal));
+		}
+
+		int32_t generatingCount = m_generatedChildrenCount[i] - instanceNumberOffset;
+
+		// Create instances
+		group->CreateInstances(instanceNumberOffset, generatingCount, m_LivingTime, m_GlobalMatrix43);*/
 	}
 }
 
@@ -338,13 +359,34 @@ const Mat43f& Instance::GetGlobalMatrix43() const
 //----------------------------------------------------------------------------------
 //
 //----------------------------------------------------------------------------------
-void Instance::Initialize( Instance* parent, int32_t instanceNumber, int32_t parentTime, const Mat43f& globalMatrix)
+void Instance::Initialize( Instance* parent, int32_t instanceNumber, const Mat43f& globalMatrix)
 {
 	assert(this->m_pContainer != nullptr);
 	
-	// Invalidate matrix
-	m_GlobalMatrix43Calculated = false;
-	m_ParentMatrix43Calculated = false;
+	// 状態の初期化
+	m_State = INSTANCE_STATE_ACTIVE;
+
+	// 親の設定
+	m_pParent = parent;
+
+	m_GlobalMatrix43 = globalMatrix;
+	assert(m_GlobalMatrix43.IsValid());
+
+	// 時間周りの初期化
+	m_LivingTime = 0.0f;
+	m_LivedTime = FLT_MAX;
+
+	m_InstanceNumber = instanceNumber;
+
+	m_IsFirstTime = true;
+}
+
+//----------------------------------------------------------------------------------
+//
+//----------------------------------------------------------------------------------
+void Instance::FirstUpdate()
+{
+	assert(this->m_pContainer != nullptr);
 
 	auto instanceGlobal = this->m_pContainer->GetRootInstance();
 
@@ -362,9 +404,6 @@ void Instance::Initialize( Instance* parent, int32_t instanceNumber, int32_t par
 		m_nextGenerationTime = m_flexibleNextGenerationTime;
 	}
 
-	// 親の設定
-	m_pParent = parent;
-
 	// initialize children
 	for (int32_t i = 0; i < parameter->GetChildrenCount(); i++)
 	{
@@ -380,10 +419,10 @@ void Instance::Initialize( Instance* parent, int32_t instanceNumber, int32_t par
 		{
 			auto maxGene = static_cast<float>(pNode->CommonValues.MaxGeneration);
 			ApplyEq(maxGene,
-					this->m_pEffectNode->m_effect,
-					this->m_pContainer->GetRootInstance(),
-					pNode->CommonValues.RefEqMaxGeneration,
-					maxGene);
+				this->m_pEffectNode->m_effect,
+				this->m_pContainer->GetRootInstance(),
+				pNode->CommonValues.RefEqMaxGeneration,
+				maxGene);
 			maxGenerationChildrenCount[i] = maxGene;
 		}
 		else
@@ -392,39 +431,26 @@ void Instance::Initialize( Instance* parent, int32_t instanceNumber, int32_t par
 		}
 	}
 
-	if( m_pParent == NULL )
+	if( m_pParent == nullptr )
 	{
-		// ROOTの場合
-
-		// 状態の初期化
-		m_State = INSTANCE_STATE_ACTIVE;
-
-		// 時間周りの初期化
-		m_LivingTime = 0.0f;
-		m_LivedTime = FLT_MAX;
-
-		// SRTの初期化
+		// initialize SRT
 		m_GenerationLocation = Mat43f::Identity;
-		m_GlobalMatrix43 = globalMatrix;
-		assert(m_GlobalMatrix43.IsValid());
 
-		// 親の初期化
+		// initialize Parent
 		m_ParentMatrix = Mat43f::Identity;
 
 		// Generate zero frame effect
 
 		// for new children
-		UpdateChildrenGroupMatrix();
+		//UpdateChildrenGroupMatrix();
+		//
+		//GenerateChildrenInRequired(0.0f);
 
-		GenerateChildrenInRequired(0.0f);
 		return;
 	}
-	
-	// 状態の初期化
-	m_State = INSTANCE_STATE_ACTIVE;
 
-	// initialize about a lifetime
-	m_LivingTime = 0.0f;
+	const int32_t parentTime = (int32_t)std::max(0.0f, this->m_pParent->m_LivingTime);
+
 	{
 		auto ri = ApplyEq(parameter->CommonValues.RefEqLife, parameter->CommonValues.life);
 		m_LivedTime = (float)ri.getValue(*instanceGlobal);
@@ -434,16 +460,14 @@ void Instance::Initialize( Instance* parent, int32_t instanceNumber, int32_t par
 
 	// calculate parent matrixt to get matrix
 	m_pParent->CalculateMatrix(0);
-	
+
 	const Mat43f& parentMatrix = m_pParent->GetGlobalMatrix43();
 	m_GlobalPosition = parentMatrix.GetTranslation();
 	m_GlobalRevisionLocation = Vec3f(0.0f, 0.0f, 0.0f);
 	m_GlobalRevisionVelocity = Vec3f(0.0f, 0.0f, 0.0f);
 	modifyWithNoise_ = Vec3f(0.0f, 0.0f, 0.0f);
 	m_GenerationLocation = Mat43f::Identity;
-	m_GlobalMatrix43 = globalMatrix;
-	assert(m_GlobalMatrix43.IsValid());
-
+	
 	// 親の初期化
 	if( parameter->CommonValues.TranslationBindType == BindType::WhenCreating ||
 		parameter->CommonValues.RotationBindType == BindType::WhenCreating ||
@@ -470,34 +494,34 @@ void Instance::Initialize( Instance* parent, int32_t instanceNumber, int32_t par
 	else if( m_pEffectNode->TranslationType == ParameterTranslationType_PVA )
 	{
 		auto rvl = ApplyEq(m_pEffectNode->TranslationPVA.RefEqP,
-						   m_pEffectNode->TranslationPVA.location,
-						   m_pEffectNode->DynamicFactor.Tra,
-						   m_pEffectNode->DynamicFactor.TraInv);
+			m_pEffectNode->TranslationPVA.location,
+			m_pEffectNode->DynamicFactor.Tra,
+			m_pEffectNode->DynamicFactor.TraInv);
 		translation_values.random.location = rvl.getValue(*this->m_pContainer->GetRootInstance());
 
 		auto rvv = ApplyEq(m_pEffectNode->TranslationPVA.RefEqV,
-						   m_pEffectNode->TranslationPVA.velocity,
-						   m_pEffectNode->DynamicFactor.Tra,
-						   m_pEffectNode->DynamicFactor.TraInv);
+			m_pEffectNode->TranslationPVA.velocity,
+			m_pEffectNode->DynamicFactor.Tra,
+			m_pEffectNode->DynamicFactor.TraInv);
 		translation_values.random.velocity = rvv.getValue(*this->m_pContainer->GetRootInstance());
 
 		auto rva = ApplyEq(m_pEffectNode->TranslationPVA.RefEqA,
-						   m_pEffectNode->TranslationPVA.acceleration,
-						   m_pEffectNode->DynamicFactor.Tra,
-						   m_pEffectNode->DynamicFactor.TraInv);
+			m_pEffectNode->TranslationPVA.acceleration,
+			m_pEffectNode->DynamicFactor.Tra,
+			m_pEffectNode->DynamicFactor.TraInv);
 		translation_values.random.acceleration = rva.getValue(*this->m_pContainer->GetRootInstance());
 
 	}
 	else if( m_pEffectNode->TranslationType == ParameterTranslationType_Easing )
 	{
 		auto rvs = ApplyEq(m_pEffectNode->TranslationEasing.RefEqS,
-						   m_pEffectNode->TranslationEasing.location.start,
-						   m_pEffectNode->DynamicFactor.Tra,
-						   m_pEffectNode->DynamicFactor.TraInv);
+			m_pEffectNode->TranslationEasing.location.start,
+			m_pEffectNode->DynamicFactor.Tra,
+			m_pEffectNode->DynamicFactor.TraInv);
 		auto rve = ApplyEq(m_pEffectNode->TranslationEasing.RefEqE,
-						   m_pEffectNode->TranslationEasing.location.end,
-						   m_pEffectNode->DynamicFactor.Tra,
-						   m_pEffectNode->DynamicFactor.TraInv);
+			m_pEffectNode->TranslationEasing.location.end,
+			m_pEffectNode->DynamicFactor.Tra,
+			m_pEffectNode->DynamicFactor.TraInv);
 
 		translation_values.easing.start = rvs.getValue(*this->m_pContainer->GetRootInstance());
 		translation_values.easing.end = rve.getValue(*this->m_pContainer->GetRootInstance());
@@ -508,7 +532,7 @@ void Instance::Initialize( Instance* parent, int32_t instanceNumber, int32_t par
 
 		translation_values.fcruve.offset = m_pEffectNode->TranslationFCurve->GetOffsets( *instanceGlobal );
 	}
-	
+
 	// Rotation
 	if( m_pEffectNode->RotationType == ParameterRotationType_Fixed )
 	{
@@ -516,17 +540,17 @@ void Instance::Initialize( Instance* parent, int32_t instanceNumber, int32_t par
 	else if( m_pEffectNode->RotationType == ParameterRotationType_PVA )
 	{
 		auto rvl = ApplyEq(m_pEffectNode->RotationPVA.RefEqP,
-						   m_pEffectNode->RotationPVA.rotation,
-						   m_pEffectNode->DynamicFactor.Rot,
-						   m_pEffectNode->DynamicFactor.RotInv);
+			m_pEffectNode->RotationPVA.rotation,
+			m_pEffectNode->DynamicFactor.Rot,
+			m_pEffectNode->DynamicFactor.RotInv);
 		auto rvv = ApplyEq(m_pEffectNode->RotationPVA.RefEqV,
-						   m_pEffectNode->RotationPVA.velocity,
-						   m_pEffectNode->DynamicFactor.Rot,
-						   m_pEffectNode->DynamicFactor.RotInv);
+			m_pEffectNode->RotationPVA.velocity,
+			m_pEffectNode->DynamicFactor.Rot,
+			m_pEffectNode->DynamicFactor.RotInv);
 		auto rva = ApplyEq(m_pEffectNode->RotationPVA.RefEqA,
-						   m_pEffectNode->RotationPVA.acceleration,
-						   m_pEffectNode->DynamicFactor.Rot,
-						   m_pEffectNode->DynamicFactor.RotInv);
+			m_pEffectNode->RotationPVA.acceleration,
+			m_pEffectNode->DynamicFactor.Rot,
+			m_pEffectNode->DynamicFactor.RotInv);
 
 		rotation_values.random.rotation = rvl.getValue(*instanceGlobal);
 		rotation_values.random.velocity = rvv.getValue(*instanceGlobal);
@@ -535,13 +559,13 @@ void Instance::Initialize( Instance* parent, int32_t instanceNumber, int32_t par
 	else if( m_pEffectNode->RotationType == ParameterRotationType_Easing )
 	{
 		auto rvs = ApplyEq(m_pEffectNode->RotationEasing.RefEqS,
-						   m_pEffectNode->RotationEasing.rotation.start,
-						   m_pEffectNode->DynamicFactor.Rot,
-						   m_pEffectNode->DynamicFactor.RotInv);
+			m_pEffectNode->RotationEasing.rotation.start,
+			m_pEffectNode->DynamicFactor.Rot,
+			m_pEffectNode->DynamicFactor.RotInv);
 		auto rve = ApplyEq(m_pEffectNode->RotationEasing.RefEqE,
-						   m_pEffectNode->RotationEasing.rotation.end,
-						   m_pEffectNode->DynamicFactor.Rot,
-						   m_pEffectNode->DynamicFactor.RotInv);
+			m_pEffectNode->RotationEasing.rotation.end,
+			m_pEffectNode->DynamicFactor.Rot,
+			m_pEffectNode->DynamicFactor.RotInv);
 
 		rotation_values.easing.start = rvs.getValue(*instanceGlobal);
 		rotation_values.easing.end = rve.getValue(*instanceGlobal);
@@ -586,13 +610,13 @@ void Instance::Initialize( Instance* parent, int32_t instanceNumber, int32_t par
 	{
 		auto rvl = ApplyEq(m_pEffectNode->ScalingPVA.RefEqP, m_pEffectNode->ScalingPVA.Position, m_pEffectNode->DynamicFactor.Scale, m_pEffectNode->DynamicFactor.ScaleInv);
 		auto rvv = ApplyEq(m_pEffectNode->ScalingPVA.RefEqV,
-						   m_pEffectNode->ScalingPVA.Velocity,
-						   m_pEffectNode->DynamicFactor.Scale,
-						   m_pEffectNode->DynamicFactor.ScaleInv);
+			m_pEffectNode->ScalingPVA.Velocity,
+			m_pEffectNode->DynamicFactor.Scale,
+			m_pEffectNode->DynamicFactor.ScaleInv);
 		auto rva = ApplyEq(m_pEffectNode->ScalingPVA.RefEqA,
-						   m_pEffectNode->ScalingPVA.Acceleration,
-						   m_pEffectNode->DynamicFactor.Scale,
-						   m_pEffectNode->DynamicFactor.ScaleInv);
+			m_pEffectNode->ScalingPVA.Acceleration,
+			m_pEffectNode->DynamicFactor.Scale,
+			m_pEffectNode->DynamicFactor.ScaleInv);
 
 		scaling_values.random.scale = rvl.getValue(*instanceGlobal);
 		scaling_values.random.velocity = rvv.getValue(*instanceGlobal);
@@ -601,13 +625,13 @@ void Instance::Initialize( Instance* parent, int32_t instanceNumber, int32_t par
 	else if( m_pEffectNode->ScalingType == ParameterScalingType_Easing )
 	{
 		auto rvs = ApplyEq(m_pEffectNode->ScalingEasing.RefEqS,
-						   m_pEffectNode->ScalingEasing.Position.start,
-						   m_pEffectNode->DynamicFactor.Scale,
-						   m_pEffectNode->DynamicFactor.ScaleInv);
+			m_pEffectNode->ScalingEasing.Position.start,
+			m_pEffectNode->DynamicFactor.Scale,
+			m_pEffectNode->DynamicFactor.ScaleInv);
 		auto rve = ApplyEq(m_pEffectNode->ScalingEasing.RefEqE,
-						   m_pEffectNode->ScalingEasing.Position.end,
-						   m_pEffectNode->DynamicFactor.Scale,
-						   m_pEffectNode->DynamicFactor.ScaleInv);
+			m_pEffectNode->ScalingEasing.Position.end,
+			m_pEffectNode->DynamicFactor.Scale,
+			m_pEffectNode->DynamicFactor.ScaleInv);
 
 		scaling_values.easing.start = rvs.getValue(*instanceGlobal);
 		scaling_values.easing.end = rve.getValue(*instanceGlobal);
@@ -653,11 +677,11 @@ void Instance::Initialize( Instance* parent, int32_t instanceNumber, int32_t par
 		{
 			auto len = dir.GetLength();
 			dir /= len;
-		
+
 			int32_t target = 0;
 			if (m_pEffectNode->GenerationLocation.line.type == ParameterGenerationLocation::LineType::Order)
 			{
-				target = instanceNumber % division;
+				target = m_InstanceNumber % division;
 			}
 			else if (m_pEffectNode->GenerationLocation.line.type == ParameterGenerationLocation::LineType::Random)
 			{
@@ -672,7 +696,7 @@ void Instance::Initialize( Instance* parent, int32_t instanceNumber, int32_t par
 			}
 
 			d += noize;
-		
+
 			s += dir * d;
 
 			Vec3f xdir;
@@ -734,7 +758,7 @@ void Instance::Initialize( Instance* parent, int32_t instanceNumber, int32_t par
 			if( model != NULL )
 			{
 				Model::Emitter emitter;
-				
+
 				if( m_pEffectNode->GenerationLocation.model.type == ParameterGenerationLocation::MODELTYPE_RANDOM )
 				{
 					emitter = model->GetEmitter( 
@@ -746,7 +770,7 @@ void Instance::Initialize( Instance* parent, int32_t instanceNumber, int32_t par
 				else if( m_pEffectNode->GenerationLocation.model.type == ParameterGenerationLocation::MODELTYPE_VERTEX )
 				{
 					emitter = model->GetEmitterFromVertex( 
-						instanceNumber,
+						m_InstanceNumber,
 						parentTime,
 						m_pManager->GetCoordinateSystem(), 
 						((EffectImplemented*)m_pEffectNode->GetEffect())->GetMaginification() );
@@ -762,7 +786,7 @@ void Instance::Initialize( Instance* parent, int32_t instanceNumber, int32_t par
 				else if( m_pEffectNode->GenerationLocation.model.type == ParameterGenerationLocation::MODELTYPE_FACE )
 				{
 					emitter = model->GetEmitterFromFace( 
-						instanceNumber,
+						m_InstanceNumber,
 						parentTime,
 						m_pManager->GetCoordinateSystem(), 
 						((EffectImplemented*)m_pEffectNode->GetEffect())->GetMaginification() );
@@ -806,11 +830,11 @@ void Instance::Initialize( Instance* parent, int32_t instanceNumber, int32_t par
 		int32_t target = 0;
 		if(m_pEffectNode->GenerationLocation.circle.type == ParameterGenerationLocation::CIRCLE_TYPE_ORDER)
 		{
-			target = instanceNumber % div;
+			target = m_InstanceNumber % div;
 		}
 		else if(m_pEffectNode->GenerationLocation.circle.type == ParameterGenerationLocation::CIRCLE_TYPE_REVERSE_ORDER)
 		{
-			target = div - 1 - (instanceNumber % div);
+			target = div - 1 - (m_InstanceNumber % div);
 		}
 		else if(m_pEffectNode->GenerationLocation.circle.type == ParameterGenerationLocation::CIRCLE_TYPE_RANDOM)
 		{
@@ -824,15 +848,15 @@ void Instance::Initialize( Instance* parent, int32_t instanceNumber, int32_t par
 
 		switch (m_pEffectNode->GenerationLocation.circle.axisDirection)
 		{
-			case ParameterGenerationLocation::AxisType::X:
-				m_GenerationLocation = Mat43f::Translation(0, 0, radius) * Mat43f::RotationX(angle);
-				break;
-			case ParameterGenerationLocation::AxisType::Y:
-				m_GenerationLocation = Mat43f::Translation(radius, 0, 0) * Mat43f::RotationY(angle);
-				break;
-			case ParameterGenerationLocation::AxisType::Z:
-				m_GenerationLocation = Mat43f::Translation(0, radius, 0) * Mat43f::RotationZ(angle);
-				break;
+		case ParameterGenerationLocation::AxisType::X:
+			m_GenerationLocation = Mat43f::Translation(0, 0, radius) * Mat43f::RotationX(angle);
+			break;
+		case ParameterGenerationLocation::AxisType::Y:
+			m_GenerationLocation = Mat43f::Translation(radius, 0, 0) * Mat43f::RotationY(angle);
+			break;
+		case ParameterGenerationLocation::AxisType::Z:
+			m_GenerationLocation = Mat43f::Translation(0, radius, 0) * Mat43f::RotationZ(angle);
+			break;
 		}
 	}
 
@@ -907,7 +931,7 @@ void Instance::Initialize( Instance* parent, int32_t instanceNumber, int32_t par
 
 		easingValue.start = nodeAlphaCrunchValue.Threshold.start.getValue(*instanceGlobal);
 		easingValue.end = nodeAlphaCrunchValue.Threshold.end.getValue(*instanceGlobal);
-	}
+		}
 	else if (m_pEffectNode->AlphaCrunch.Type == ParameterAlphaCrunch::EType::F_CURVE)
 	{
 		auto& fcurveValue = alpha_crunch_values.fcurve;
@@ -921,7 +945,7 @@ void Instance::Initialize( Instance* parent, int32_t instanceNumber, int32_t par
 		uvTimeOffset = (int32_t)m_pEffectNode->RendererCommon.UV.Animation.StartFrame.getValue(*instanceGlobal);
 		uvTimeOffset *= m_pEffectNode->RendererCommon.UV.Animation.FrameLength;
 	}
-	
+
 	if (m_pEffectNode->RendererCommon.UVType == ParameterRendererCommon::UV_SCROLL)
 	{
 		auto xy = m_pEffectNode->RendererCommon.UV.Scroll.Position.getValue(*instanceGlobal);
@@ -986,17 +1010,17 @@ void Instance::Initialize( Instance* parent, int32_t instanceNumber, int32_t par
 
 	m_pEffectNode->InitializeRenderedInstance(*this, m_pManager);
 
-	if (IsRequiredToCreateChildren(0.0f))
-	{
-		// calculate myself to update children group matrix
-		CalculateMatrix(0);
-
-		// for new children
-		UpdateChildrenGroupMatrix();
-
-		// Generate zero frame effect
-		GenerateChildrenInRequired(0.0f);
-	}
+	//if (IsRequiredToCreateChildren(0.0f))
+	//{
+	//	// calculate myself to update children group matrix
+	//	CalculateMatrix(0);
+	//
+	//	// for new children
+	//	UpdateChildrenGroupMatrix();
+	//
+	//	// Generate zero frame effect
+	//	GenerateChildrenInRequired(0.0f);
+	//}
 }
 
 //----------------------------------------------------------------------------------
@@ -1005,10 +1029,16 @@ void Instance::Initialize( Instance* parent, int32_t instanceNumber, int32_t par
 void Instance::Update( float deltaFrame, bool shown )
 {
 	assert(this->m_pContainer != nullptr);
-	
+
 	// Invalidate matrix
 	m_GlobalMatrix43Calculated = false;
 	m_ParentMatrix43Calculated = false;
+
+	if( m_IsFirstTime )
+	{
+		FirstUpdate();
+		m_IsFirstTime = false;
+	}
 
 	if (is_time_step_allowed && m_pEffectNode->GetType() != EFFECT_NODE_TYPE_ROOT)
 	{
@@ -1025,8 +1055,6 @@ void Instance::Update( float deltaFrame, bool shown )
 		}
 	}
 
-	float originalTime = m_LivingTime;
-
 	// step time
 	// frame 0 - generated time
 	// frame 1- now
@@ -1035,7 +1063,7 @@ void Instance::Update( float deltaFrame, bool shown )
 		m_LivingTime += deltaFrame;
 	}
 
-	if(shown)
+	if (shown)
 	{
 		CalculateMatrix( deltaFrame );
 	}
@@ -1065,18 +1093,12 @@ void Instance::Update( float deltaFrame, bool shown )
 	}
 
 	// Create child particles
-	if( is_time_step_allowed && (originalTime <= m_LivedTime || !m_pEffectNode->CommonValues.RemoveWhenLifeIsExtinct) )
-	{
-		GenerateChildrenInRequired(originalTime + deltaFrame);
-	}
+	//if( !m_pEffectNode->CommonValues.RemoveWhenLifeIsExtinct )
+	//{
+	//	GenerateChildrenInRequired(m_LivingTime);
+	//}
 
 	UpdateChildrenGroupMatrix();
-	/*
-	for (InstanceGroup* group = childrenGroups_; group != nullptr; group = group->NextUsedByInstance)
-	{
-		group->SetParentMatrix(m_GlobalMatrix43);
-	}
-	*/
 
 	// check whether killed?
 	bool killed = false;

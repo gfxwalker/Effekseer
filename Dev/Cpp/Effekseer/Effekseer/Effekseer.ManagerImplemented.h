@@ -2,6 +2,12 @@
 #ifndef __EFFEKSEER_MANAGER_IMPLEMENTED_H__
 #define __EFFEKSEER_MANAGER_IMPLEMENTED_H__
 
+#include <thread>
+#include <condition_variable>
+#include <mutex>
+#include <functional>
+#include <atomic>
+
 #include "Culling/Culling3D.h"
 #include "Effekseer.Base.h"
 #include "Effekseer.InstanceChunk.h"
@@ -113,6 +119,25 @@ private:
 	} cullingCurrent, cullingNext;
 
 private:
+	class WorkerThread
+	{
+	public:
+		WorkerThread();
+		~WorkerThread();
+		void RunAsync(std::function<void()> task);
+		void WaitForComplete();
+	private:
+		std::thread m_Thread;
+		std::function<void()> m_Task;
+		std::mutex m_Mutex;
+		std::condition_variable m_TaskRequestCV;
+		std::condition_variable m_TaskWaitCV;
+		std::atomic<bool> m_TaskRequested = false;
+		std::atomic<bool> m_TaskCompleted = false;
+		std::atomic<bool> m_QuitRequested = false;
+	};
+	std::array<WorkerThread, 2> m_WorkerThreads;
+
 	//! whether does rendering and update handle flipped automatically
 	bool m_autoFlip = true;
 
