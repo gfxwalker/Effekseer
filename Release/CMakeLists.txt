@@ -9,6 +9,7 @@ option(BUILD_EXAMPLES "Build examples" ON)
 # For MSVC
 if (MSVC)
     option(USE_MSVC_RUNTIME_LIBRARY_DLL "Use MSVC runtime library DLL" OFF)
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Zi")
 endif()
 
 # MSVC Flag
